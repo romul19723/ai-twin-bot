@@ -11,9 +11,9 @@
   python roboforex_ai_twin_bot.py
 
 НАСТРОЙКИ — измени ниже:
-  BOT_TOKEN     — токен твоего бота от @BotFather
-  GROQ_API_KEY  — ключ от console.groq.com (бесплатно)
-  OWNER_ID      — твой Telegram ID (узнай у @userinfobot)
+  BOT_TOKEN 8956666468:AAFdlYAJhAvSByheiAzEXQkHc00TdO_n5tc    — токен твоего бота от @BotFather
+  GROQ_API_KEY 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 — ключ от console.groq.com (бесплатно)
+  OWNER_ID 951626517     — твой Telegram ID (узнай у @userinfobot)
 """
 
 import telebot
