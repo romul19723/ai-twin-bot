@@ -11,9 +11,9 @@
   python roboforex_ai_twin_bot.py
 
 НАСТРОЙКИ — измени ниже:
-  BOT_TOKEN 8956666468:AAFdlYAJhAvSByheiAzEXQkHc00TdO_n5tc
-  GROQ_API_KEY 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 — ключ от console.groq.com
-  OWNER_ID 951626517
+  BOT_TOKEN
+  GROQ_API_KEY  — ключ от console.groq.com
+  OWNER_ID 
 """
 
 import telebot
