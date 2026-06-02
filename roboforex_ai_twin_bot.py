@@ -2,18 +2,19 @@
 🤖 AI-ДВОЙНИК — Telegram бот для привлечения партнёров RoboForex
 ================================================================
 Автор: AI-ассистент Claude
-Версия: 1.0
+Версия: 1.1 — добавлена поддержка изображений и графиков
 
 УСТАНОВКА:
-  pip install pyTelegramBotAPI requests
+  pip install pyTelegramBotAPI requests anthropic
 
 ЗАПУСК:
   python roboforex_ai_twin_bot.py
 
-НАСТРОЙКИ — измени ниже:
+НАСТРОЙКИ (переменные окружения Railway):
   BOT_TOKEN
-  GROQ_API_KEY  — ключ от console.groq.com
-  OWNER_ID 
+  GROQ_API_KEY       — ключ от console.groq.com
+  ANTHROPIC_API_KEY  — ключ от console.anthropic.com (для анализа изображений)
+  OWNER_ID
 """
 
 import telebot
@@ -21,18 +22,17 @@ import requests
 import json
 import time
 import logging
+import base64
+import anthropic
 from datetime import datetime
-
-# ─────────────────────────────────────────────
-#  НАСТРОЙКИ — ЗАПОЛНИ ЗДЕСЬ
-# ─────────────────────────────────────────────
 
 import os
 
-BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-OWNER_ID_STR = os.environ.get("OWNER_ID", "")
-OWNER_ID     = int(OWNER_ID_STR) if OWNER_ID_STR.isdigit() else None
+BOT_TOKEN         = os.environ.get("BOT_TOKEN", "")
+GROQ_API_KEY      = os.environ.get("GROQ_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+OWNER_ID_STR      = os.environ.get("OWNER_ID", "")
+OWNER_ID          = int(OWNER_ID_STR) if OWNER_ID_STR.isdigit() else None
 
 # Ссылки
 LANDING_URL  = "https://romul19723.github.io/roboforex-agent"
@@ -147,33 +147,28 @@ logging.basicConfig(
 log = logging.getLogger("AITwin")
 
 # ─────────────────────────────────────────────
-#  ИНИЦИАЛИЗАЦИЯ БОТА
+#  ИНИЦИАЛИЗАЦИЯ
 # ─────────────────────────────────────────────
 
 bot = telebot.TeleBot(BOT_TOKEN)
+anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# Хранение истории диалогов (в памяти)
 chat_histories = {}
 hot_leads_notified = set()
 
 # ─────────────────────────────────────────────
-#  GROQ AI — ПОЛУЧЕНИЕ ОТВЕТА
+#  GROQ AI — ТЕКСТОВЫЕ ОТВЕТЫ
 # ─────────────────────────────────────────────
 
 def get_ai_response(user_id: int, user_message: str, user_name: str = "") -> str:
-    """Получает ответ от Groq AI с учётом истории диалога."""
-
-    # Инициализируем историю если нет
     if user_id not in chat_histories:
         chat_histories[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Добавляем сообщение пользователя
     chat_histories[user_id].append({
         "role": "user",
         "content": f"[{user_name}]: {user_message}" if user_name else user_message
     })
 
-    # Ограничиваем историю до 20 сообщений (экономия токенов)
     if len(chat_histories[user_id]) > 21:
         system_msg = chat_histories[user_id][0]
         chat_histories[user_id] = [system_msg] + chat_histories[user_id][-20:]
@@ -198,7 +193,6 @@ def get_ai_response(user_id: int, user_message: str, user_name: str = "") -> str
 
         if "choices" in data and data["choices"]:
             reply = data["choices"][0]["message"]["content"].strip()
-            # Сохраняем ответ в историю
             chat_histories[user_id].append({"role": "assistant", "content": reply})
             return reply
         else:
@@ -213,7 +207,65 @@ def get_ai_response(user_id: int, user_message: str, user_name: str = "") -> str
 
 
 # ─────────────────────────────────────────────
-#  ОПРЕДЕЛЕНИЕ ГОРЯЧЕГО ЛИДА
+#  CLAUDE — АНАЛИЗ ИЗОБРАЖЕНИЙ И ГРАФИКОВ
+# ─────────────────────────────────────────────
+
+def analyze_image_with_claude(image_bytes: bytes, caption: str = "", user_name: str = "") -> str:
+    """Анализирует изображение через Claude Vision и отвечает в стиле Wealth Architect."""
+    
+    image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+    
+    # Контекст для анализа
+    user_context = f'Пользователь {user_name} прислал изображение.' if user_name else 'Пользователь прислал изображение.'
+    caption_context = f' Подпись к изображению: «{caption}»' if caption else ''
+    
+    prompt = (
+        f"{user_context}{caption_context}\n\n"
+        "Проанализируй это изображение как Wealth Architect — элитный финансовый советник и трейдер. "
+        "Если это торговый график — опиши тренд, ключевые уровни, паттерны, и дай краткую торговую идею. "
+        "Если это скриншот портфеля — прокомментируй состав и распределение активов. "
+        "Если это другое финансовое изображение — дай экспертный комментарий. "
+        "Отвечай в своём стиле: компактно (3-5 предложений), по делу, с умеренными эмодзи. "
+        "В конце мягко предложи обсудить стратегию подробнее."
+    )
+
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=400,
+            system=SYSTEM_PROMPT,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_b64,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ],
+                }
+            ],
+        )
+        
+        reply = response.content[0].text.strip()
+        log.info(f"Claude проанализировал изображение: {reply[:60]}...")
+        return reply
+
+    except Exception as e:
+        log.error(f"Ошибка Claude Vision: {e}")
+        return "Получил изображение, но не смог его обработать 🔧 Попробуй прислать в формате JPG или PNG."
+
+
+# ─────────────────────────────────────────────
+#  ГОРЯЧИЙ ЛИД
 # ─────────────────────────────────────────────
 
 HOT_KEYWORDS = [
@@ -225,11 +277,8 @@ HOT_KEYWORDS = [
 ]
 
 def is_hot_lead(message: str, ai_reply: str) -> bool:
-    """Проверяет является ли диалог горячим лидом."""
     msg_lower = message.lower()
     reply_lower = ai_reply.lower()
-
-    # Проверяем ключевые слова в сообщении пользователя
     for kw in HOT_KEYWORDS:
         if kw.lower() in msg_lower or kw.lower() in reply_lower:
             return True
@@ -237,14 +286,13 @@ def is_hot_lead(message: str, ai_reply: str) -> bool:
 
 
 def notify_owner(user_info: dict, message: str, ai_reply: str):
-    """Уведомляет владельца о горячем лиде."""
     if not OWNER_ID:
         log.warning("OWNER_ID не задан — уведомления не отправляются!")
         return
 
     user_id = user_info.get("id")
     if user_id in hot_leads_notified:
-        return  # Уже уведомляли об этом лиде
+        return
 
     hot_leads_notified.add(user_id)
 
@@ -277,32 +325,25 @@ def notify_owner(user_info: dict, message: str, ai_reply: str):
 
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    """Обработка команды /start."""
     user = message.from_user
     name = user.first_name or "друг"
-
     log.info(f"Новый пользователь: {name} (@{user.username}) ID:{user.id}")
-
-    # Инициализируем историю
     chat_histories[user.id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     greeting = (
         f"Привет, {name}! 👋\n\n"
         f"Занимаюсь крипто-инвестициями и партнёрскими программами. "
         f"Помогаю людям выстраивать пассивный доход без постоянного присутствия у монитора.\n\n"
+        f"Можешь писать текст или присылать графики и скриншоты — разберём вместе 📊\n\n"
         f"Чем могу помочь? 🤝"
     )
-
     bot.send_message(message.chat.id, greeting)
 
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
-    """Сброс истории диалога."""
     if message.from_user.id == OWNER_ID:
-        target_id = message.from_user.id
-        if target_id in chat_histories:
-            chat_histories[target_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        chat_histories[message.from_user.id] = [{"role": "system", "content": SYSTEM_PROMPT}]
         bot.send_message(message.chat.id, "✅ История диалога сброшена")
     else:
         bot.send_message(message.chat.id, "Эта команда недоступна 🤷")
@@ -310,14 +351,11 @@ def handle_reset(message):
 
 @bot.message_handler(commands=["stats"])
 def handle_stats(message):
-    """Статистика для владельца."""
     if message.from_user.id == OWNER_ID:
-        total_users = len(chat_histories)
-        total_leads = len(hot_leads_notified)
         stats = (
             f"📊 Статистика бота:\n\n"
-            f"👥 Пользователей в памяти: {total_users}\n"
-            f"🔥 Горячих лидов найдено: {total_leads}\n"
+            f"👥 Пользователей в памяти: {len(chat_histories)}\n"
+            f"🔥 Горячих лидов найдено: {len(hot_leads_notified)}\n"
             f"⏰ Время работы: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         )
         bot.send_message(message.chat.id, stats)
@@ -325,30 +363,66 @@ def handle_stats(message):
         bot.send_message(message.chat.id, "Команда недоступна 🤷")
 
 
+@bot.message_handler(content_types=["photo"])
+def handle_photo(message):
+    """Обработчик изображений и графиков."""
+    user = message.from_user
+    user_name = user.first_name or ""
+    caption = message.caption or ""
+
+    log.info(f"Фото от {user_name} (@{user.username}), подпись: {caption[:50]}")
+    bot.send_chat_action(message.chat.id, "typing")
+
+    try:
+        # Берём фото наибольшего разрешения
+        photo = message.photo[-1]
+        file_info = bot.get_file(photo.file_id)
+        file_bytes = bot.download_file(file_info.file_path)
+
+        # Анализируем через Claude
+        ai_reply = analyze_image_with_claude(file_bytes, caption, user_name)
+
+        # Сохраняем в историю диалога
+        if user.id not in chat_histories:
+            chat_histories[user.id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        
+        img_note = f"[Пользователь прислал изображение. Подпись: «{caption}»]" if caption else "[Пользователь прислал изображение]"
+        chat_histories[user.id].append({"role": "user", "content": img_note})
+        chat_histories[user.id].append({"role": "assistant", "content": ai_reply})
+
+        time.sleep(1)
+        bot.send_message(message.chat.id, ai_reply)
+
+        # Проверяем горячий лид
+        if is_hot_lead(caption, ai_reply):
+            notify_owner(
+                {"id": user.id, "first_name": user.first_name,
+                 "last_name": user.last_name or "", "username": user.username or ""},
+                caption or "[изображение]", ai_reply
+            )
+
+    except Exception as e:
+        log.error(f"Ошибка обработки фото: {e}")
+        bot.send_message(message.chat.id, "Не смог обработать изображение 🔧 Попробуй ещё раз.")
+
+
 @bot.message_handler(func=lambda m: True, content_types=["text"])
 def handle_message(message):
-    """Главный обработчик всех текстовых сообщений."""
+    """Главный обработчик текстовых сообщений."""
     user = message.from_user
     user_text = message.text
     user_name = user.first_name or ""
 
     log.info(f"Сообщение от {user_name} (@{user.username}): {user_text[:50]}...")
-
-    # Показываем что бот печатает
     bot.send_chat_action(message.chat.id, "typing")
 
-    # Получаем ответ от AI
     ai_reply = get_ai_response(user.id, user_text, user_name)
 
-    # Небольшая пауза для реалистичности (имитация набора текста)
     words = len(ai_reply.split())
-    typing_delay = min(words * 0.08, 3.0)  # Макс 3 секунды
-    time.sleep(typing_delay)
+    time.sleep(min(words * 0.08, 3.0))
 
-    # Отправляем ответ
     bot.send_message(message.chat.id, ai_reply)
 
-    # Проверяем горячий лид
     if is_hot_lead(user_text, ai_reply):
         notify_owner(
             {"id": user.id, "first_name": user.first_name,
@@ -365,13 +439,15 @@ def handle_message(message):
 
 if __name__ == "__main__":
     log.info("=" * 50)
-    log.info("  AI-Двойник RoboForex — бот запущен!")
+    log.info("  AI-Двойник RoboForex v1.1 — бот запущен!")
+    log.info("  ✅ Поддержка изображений через Claude Vision")
     log.info("=" * 50)
 
     if not OWNER_ID:
-        log.warning("⚠️  OWNER_ID не задан! Узнай свой ID у @userinfobot и вставь в настройки.")
+        log.warning("⚠️  OWNER_ID не задан!")
+    if not ANTHROPIC_API_KEY:
+        log.warning("⚠️  ANTHROPIC_API_KEY не задан — анализ изображений недоступен!")
 
-    log.info(f"Бот: {BOT_TOKEN[:20]}...")
     log.info(f"Лендинг: {LANDING_URL}")
     log.info("Ожидаю сообщения...\n")
 
