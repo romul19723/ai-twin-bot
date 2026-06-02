@@ -23,7 +23,7 @@ import json
 import time
 import logging
 import base64
-import google.generativeai as genai
+import base64 as _base64
 from datetime import datetime
 
 import os
@@ -151,8 +151,7 @@ log = logging.getLogger("AITwin")
 # ─────────────────────────────────────────────
 
 bot = telebot.TeleBot(BOT_TOKEN)
-genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel("gemini-1.5-pro-latest")
+# Gemini через прямой HTTP запрос
 
 chat_histories = {}
 hot_leads_notified = set()
@@ -226,7 +225,7 @@ def detect_media_type(image_bytes: bytes) -> str:
 
 
 def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: str = "") -> str:
-    """Анализирует изображение через Claude Vision и отвечает в стиле Wealth Architect."""
+    """Анализирует изображение через Google Gemini Vision API."""
 
     media_type = detect_media_type(image_bytes)
     log.info(f"Тип изображения: {media_type}, размер: {len(image_bytes)} байт")
@@ -235,6 +234,7 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
     caption_context = f' Подпись: «{caption}»' if caption else ''
 
     prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
         f"{user_context}{caption_context}\n\n"
         "Проанализируй это изображение как Wealth Architect — элитный финансовый советник и трейдер. "
         "Если это торговый график — опиши тренд, ключевые уровни, паттерны, дай краткую торговую идею. "
@@ -245,14 +245,29 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
     )
 
     try:
-        response = gemini_model.generate_content(
-            [prompt, {"mime_type": media_type, "data": image_bytes}],
-            generation_config={"max_output_tokens": 400, "temperature": 0.75}
-        )
+        image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
-        reply = response.text.strip()
-        log.info(f"Gemini ответил на изображение: {reply[:60]}...")
-        return reply
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": media_type, "data": image_b64}}
+                ]
+            }],
+            "generationConfig": {"maxOutputTokens": 400, "temperature": 0.75}
+        }
+
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        response = requests.post(url, json=payload, timeout=30)
+        data = response.json()
+
+        if "candidates" in data and data["candidates"]:
+            reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            log.info(f"Gemini ответил: {reply[:60]}...")
+            return reply
+        else:
+            log.error(f"Gemini ответ без candidates: {data}")
+            return "Получил график, но возникла техническая ошибка 🔧 Попробуй ещё раз."
 
     except Exception as e:
         log.error(f"Ошибка Gemini Vision: {type(e).__name__}: {e}")
