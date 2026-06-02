@@ -210,22 +210,37 @@ def get_ai_response(user_id: int, user_message: str, user_name: str = "") -> str
 #  CLAUDE — АНАЛИЗ ИЗОБРАЖЕНИЙ И ГРАФИКОВ
 # ─────────────────────────────────────────────
 
+def detect_media_type(image_bytes: bytes) -> str:
+    """Определяет тип изображения по заголовку файла."""
+    if image_bytes[:4] == b'\x89PNG':
+        return "image/png"
+    elif image_bytes[:3] == b'\xff\xd8\xff':
+        return "image/jpeg"
+    elif image_bytes[:6] in (b'GIF87a', b'GIF89a'):
+        return "image/gif"
+    elif image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+        return "image/webp"
+    else:
+        return "image/jpeg"  # fallback
+
+
 def analyze_image_with_claude(image_bytes: bytes, caption: str = "", user_name: str = "") -> str:
     """Анализирует изображение через Claude Vision и отвечает в стиле Wealth Architect."""
-    
+
     image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-    
-    # Контекст для анализа
+    media_type = detect_media_type(image_bytes)
+    log.info(f"Тип изображения: {media_type}, размер: {len(image_bytes)} байт")
+
     user_context = f'Пользователь {user_name} прислал изображение.' if user_name else 'Пользователь прислал изображение.'
-    caption_context = f' Подпись к изображению: «{caption}»' if caption else ''
-    
+    caption_context = f' Подпись: «{caption}»' if caption else ''
+
     prompt = (
         f"{user_context}{caption_context}\n\n"
         "Проанализируй это изображение как Wealth Architect — элитный финансовый советник и трейдер. "
-        "Если это торговый график — опиши тренд, ключевые уровни, паттерны, и дай краткую торговую идею. "
+        "Если это торговый график — опиши тренд, ключевые уровни, паттерны, дай краткую торговую идею. "
         "Если это скриншот портфеля — прокомментируй состав и распределение активов. "
         "Если это другое финансовое изображение — дай экспертный комментарий. "
-        "Отвечай в своём стиле: компактно (3-5 предложений), по делу, с умеренными эмодзи. "
+        "Отвечай компактно (3-5 предложений), по делу, с умеренными эмодзи. "
         "В конце мягко предложи обсудить стратегию подробнее."
     )
 
@@ -242,7 +257,7 @@ def analyze_image_with_claude(image_bytes: bytes, caption: str = "", user_name: 
                             "type": "image",
                             "source": {
                                 "type": "base64",
-                                "media_type": "image/jpeg",
+                                "media_type": media_type,
                                 "data": image_b64,
                             },
                         },
@@ -254,14 +269,14 @@ def analyze_image_with_claude(image_bytes: bytes, caption: str = "", user_name: 
                 }
             ],
         )
-        
+
         reply = response.content[0].text.strip()
-        log.info(f"Claude проанализировал изображение: {reply[:60]}...")
+        log.info(f"Claude ответил на изображение: {reply[:60]}...")
         return reply
 
     except Exception as e:
-        log.error(f"Ошибка Claude Vision: {e}")
-        return "Получил изображение, но не смог его обработать 🔧 Попробуй прислать в формате JPG или PNG."
+        log.error(f"Ошибка Claude Vision: {type(e).__name__}: {e}")
+        return f"Получил график, но возникла техническая ошибка 🔧 Попробуй ещё раз."
 
 
 # ─────────────────────────────────────────────
