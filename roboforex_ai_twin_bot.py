@@ -248,7 +248,7 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
         image_part = types.Part.from_bytes(data=image_bytes, mime_type=media_type)
 
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=[prompt, image_part],
             config=types.GenerateContentConfig(max_output_tokens=400, temperature=0.75)
         )
