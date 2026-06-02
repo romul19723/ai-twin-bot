@@ -23,8 +23,7 @@ import json
 import time
 import logging
 import base64
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from datetime import datetime
 
 import os
@@ -152,7 +151,8 @@ log = logging.getLogger("AITwin")
 # ─────────────────────────────────────────────
 
 bot = telebot.TeleBot(BOT_TOKEN)
-gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-pro-vision")
 
 chat_histories = {}
 hot_leads_notified = set()
@@ -245,20 +245,21 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
     )
 
     try:
-        image_part = types.Part.from_bytes(data=image_bytes, mime_type=media_type)
+        import PIL.Image
+        import io
+        pil_image = PIL.Image.open(io.BytesIO(image_bytes))
 
-        response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash-preview-05-20",
-            contents=[prompt, image_part],
-            config=types.GenerateContentConfig(max_output_tokens=400, temperature=0.75)
+        response = gemini_model.generate_content(
+            [prompt, pil_image],
+            generation_config={"max_output_tokens": 400, "temperature": 0.75}
         )
 
         reply = response.text.strip()
-        log.info(f"Gemini ответил на изображение: {reply[:60]}...")
+        log.info(f"Gemini ответил:")  # {reply[:60]}...")
         return reply
 
     except Exception as e:
-        log.error(f"Ошибка Gemini Vision: {type(e).__name__}: {e}")
+        log.error(f"Ошибка Gemini:")  # {type(e).__name__}: {e}")
         return "Получил график, но возникла техническая ошибка 🔧 Попробуй ещё раз."
 
 
