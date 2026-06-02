@@ -23,7 +23,8 @@ import json
 import time
 import logging
 import base64
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from datetime import datetime
 
 import os
@@ -151,8 +152,7 @@ log = logging.getLogger("AITwin")
 # ─────────────────────────────────────────────
 
 bot = telebot.TeleBot(BOT_TOKEN)
-genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 chat_histories = {}
 hot_leads_notified = set()
@@ -245,11 +245,12 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
     )
 
     try:
-        image_part = {"mime_type": media_type, "data": image_bytes}
+        image_part = types.Part.from_bytes(data=image_bytes, mime_type=media_type)
 
-        response = gemini_model.generate_content(
-            [prompt, image_part],
-            generation_config={"max_output_tokens": 400, "temperature": 0.75}
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[prompt, image_part],
+            config=types.GenerateContentConfig(max_output_tokens=400, temperature=0.75)
         )
 
         reply = response.text.strip()
