@@ -30,7 +30,7 @@ import os
 
 BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OWNER_ID_STR   = os.environ.get("OWNER_ID", "")
 OWNER_ID       = int(OWNER_ID_STR) if OWNER_ID_STR.isdigit() else None
 
@@ -151,7 +151,7 @@ log = logging.getLogger("AITwin")
 # ─────────────────────────────────────────────
 
 bot = telebot.TeleBot(BOT_TOKEN)
-# Gemini через прямой HTTP запрос
+# OpenRouter через прямой HTTP запрос
 
 chat_histories = {}
 hot_leads_notified = set()
@@ -248,25 +248,38 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
         image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
         payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {"inline_data": {"mime_type": media_type, "data": image_b64}}
+            "model": "google/gemini-2.0-flash-exp:free",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:{media_type};base64,{image_b64}"
+                    }}
                 ]
             }],
-            "generationConfig": {"maxOutputTokens": 400, "temperature": 0.75}
+            "max_tokens": 400
         }
 
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://t.me/AlgoRobi",
+                "X-Title": "AlgoRobi Bot"
+            },
+            json=payload,
+            timeout=30
+        )
         data = response.json()
 
-        if "candidates" in data and data["candidates"]:
-            reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            log.info(f"Gemini ответил: {reply[:60]}...")
+        if "choices" in data and data["choices"]:
+            reply = data["choices"][0]["message"]["content"].strip()
+            log.info(f"OpenRouter ответил: {reply[:60]}...")
             return reply
         else:
-            log.error(f"Gemini ответ без candidates: {data}")
+            log.error(f"OpenRouter ответ без choices: {data}")
             return "Получил график, но возникла техническая ошибка 🔧 Попробуй ещё раз."
 
     except Exception as e:
@@ -455,8 +468,8 @@ if __name__ == "__main__":
 
     if not OWNER_ID:
         log.warning("⚠️  OWNER_ID не задан!")
-    if not GEMINI_API_KEY:
-        log.warning("⚠️  GEMINI_API_KEY не задан — анализ изображений недоступен!")
+    if not OPENROUTER_API_KEY:
+        log.warning("⚠️  OPENROUTER_API_KEY не задан — анализ изображений недоступен!")
 
     log.info(f"Лендинг: {LANDING_URL}")
     log.info("Ожидаю сообщения...\n")
