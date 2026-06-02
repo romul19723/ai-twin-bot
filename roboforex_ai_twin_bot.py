@@ -5,7 +5,7 @@
 Версия: 1.2 — анализ изображений через Google Gemini (бесплатно)
 
 УСТАНОВКА:
-  pip install pyTelegramBotAPI requests google-generativeai
+  pip install pyTelegramBotAPI requests google-genai
 
 ЗАПУСК:
   python roboforex_ai_twin_bot.py
@@ -443,7 +443,7 @@ if __name__ == "__main__":
 
     if not OWNER_ID:
         log.warning("⚠️  OWNER_ID не задан!")
-    if not ANTHROPIC_API_KEY:
+    if not GEMINI_API_KEY:
         log.warning("⚠️  GEMINI_API_KEY не задан — анализ изображений недоступен!")
 
     log.info(f"Лендинг: {LANDING_URL}")
