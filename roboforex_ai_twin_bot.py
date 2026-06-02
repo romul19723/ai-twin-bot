@@ -257,7 +257,7 @@ def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: 
             "generationConfig": {"maxOutputTokens": 400, "temperature": 0.75}
         }
 
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
         response = requests.post(url, json=payload, timeout=30)
         data = response.json()
 
