@@ -2,18 +2,18 @@
 🤖 AI-ДВОЙНИК — Telegram бот для привлечения партнёров RoboForex
 ================================================================
 Автор: AI-ассистент Claude
-Версия: 1.1 — добавлена поддержка изображений и графиков
+Версия: 1.2 — анализ изображений через Google Gemini (бесплатно)
 
 УСТАНОВКА:
-  pip install pyTelegramBotAPI requests anthropic
+  pip install pyTelegramBotAPI requests google-generativeai
 
 ЗАПУСК:
   python roboforex_ai_twin_bot.py
 
 НАСТРОЙКИ (переменные окружения Railway):
   BOT_TOKEN
-  GROQ_API_KEY       — ключ от console.groq.com
-  ANTHROPIC_API_KEY  — ключ от console.anthropic.com (для анализа изображений)
+  GROQ_API_KEY      — ключ от console.groq.com
+  GEMINI_API_KEY    — ключ от aistudio.google.com (бесплатно)
   OWNER_ID
 """
 
@@ -23,16 +23,16 @@ import json
 import time
 import logging
 import base64
-import anthropic
+import google.generativeai as genai
 from datetime import datetime
 
 import os
 
-BOT_TOKEN         = os.environ.get("BOT_TOKEN", "")
-GROQ_API_KEY      = os.environ.get("GROQ_API_KEY", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-OWNER_ID_STR      = os.environ.get("OWNER_ID", "")
-OWNER_ID          = int(OWNER_ID_STR) if OWNER_ID_STR.isdigit() else None
+BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
+GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+OWNER_ID_STR   = os.environ.get("OWNER_ID", "")
+OWNER_ID       = int(OWNER_ID_STR) if OWNER_ID_STR.isdigit() else None
 
 # Ссылки
 LANDING_URL  = "https://romul19723.github.io/roboforex-agent"
@@ -151,7 +151,8 @@ log = logging.getLogger("AITwin")
 # ─────────────────────────────────────────────
 
 bot = telebot.TeleBot(BOT_TOKEN)
-anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 chat_histories = {}
 hot_leads_notified = set()
@@ -224,10 +225,9 @@ def detect_media_type(image_bytes: bytes) -> str:
         return "image/jpeg"  # fallback
 
 
-def analyze_image_with_claude(image_bytes: bytes, caption: str = "", user_name: str = "") -> str:
+def analyze_image_with_gemini(image_bytes: bytes, caption: str = "", user_name: str = "") -> str:
     """Анализирует изображение через Claude Vision и отвечает в стиле Wealth Architect."""
 
-    image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
     media_type = detect_media_type(image_bytes)
     log.info(f"Тип изображения: {media_type}, размер: {len(image_bytes)} байт")
 
@@ -245,38 +245,20 @@ def analyze_image_with_claude(image_bytes: bytes, caption: str = "", user_name: 
     )
 
     try:
-        response = anthropic_client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=400,
-            system=SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": image_b64,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ],
-                }
-            ],
+        image_part = {"mime_type": media_type, "data": image_bytes}
+
+        response = gemini_model.generate_content(
+            [prompt, image_part],
+            generation_config={"max_output_tokens": 400, "temperature": 0.75}
         )
 
-        reply = response.content[0].text.strip()
-        log.info(f"Claude ответил на изображение: {reply[:60]}...")
+        reply = response.text.strip()
+        log.info(f"Gemini ответил на изображение: {reply[:60]}...")
         return reply
 
     except Exception as e:
-        log.error(f"Ошибка Claude Vision: {type(e).__name__}: {e}")
-        return f"Получил график, но возникла техническая ошибка 🔧 Попробуй ещё раз."
+        log.error(f"Ошибка Gemini Vision: {type(e).__name__}: {e}")
+        return "Получил график, но возникла техническая ошибка 🔧 Попробуй ещё раз."
 
 
 # ─────────────────────────────────────────────
@@ -395,7 +377,7 @@ def handle_photo(message):
         file_bytes = bot.download_file(file_info.file_path)
 
         # Анализируем через Claude
-        ai_reply = analyze_image_with_claude(file_bytes, caption, user_name)
+        ai_reply = analyze_image_with_gemini(file_bytes, caption, user_name)
 
         # Сохраняем в историю диалога
         if user.id not in chat_histories:
@@ -454,14 +436,14 @@ def handle_message(message):
 
 if __name__ == "__main__":
     log.info("=" * 50)
-    log.info("  AI-Двойник RoboForex v1.1 — бот запущен!")
-    log.info("  ✅ Поддержка изображений через Claude Vision")
+    log.info("  AI-Двойник RoboForex v1.2 — бот запущен!")
+    log.info("  ✅ Поддержка изображений через Google Gemini (бесплатно)")
     log.info("=" * 50)
 
     if not OWNER_ID:
         log.warning("⚠️  OWNER_ID не задан!")
     if not ANTHROPIC_API_KEY:
-        log.warning("⚠️  ANTHROPIC_API_KEY не задан — анализ изображений недоступен!")
+        log.warning("⚠️  GEMINI_API_KEY не задан — анализ изображений недоступен!")
 
     log.info(f"Лендинг: {LANDING_URL}")
     log.info("Ожидаю сообщения...\n")
