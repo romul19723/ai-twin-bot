@@ -34,10 +34,10 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OWNER_ID_STR   = os.environ.get("OWNER_ID", "")
 OWNER_ID       = int(OWNER_ID_STR) if OWNER_ID_STR.isdigit() else None
 
-# Ссылки
-LANDING_URL  = "https://romul19723.github.io/roboforex-agent"
-REF_URL      = "https://rbfxdirect.com/ru/lk/?a=rgtfy"
-TG_BOT_URL   = "https://t.me/GlobalSharkTopBot?start=4aa681da-f147-4229-888e-27fb4e9a58a5"
+# Ссылки — задаются через переменные окружения Railway
+LANDING_URL  = os.environ.get("LANDING_URL",  "https://romul19723.github.io/roboforex-agent")
+REF_URL      = os.environ.get("REF_URL",      "https://rbfxdirect.com/ru/lk/?a=rgtfy")
+TG_BOT_URL   = os.environ.get("TG_BOT_URL",   "https://t.me/GlobalSharkTopBot?start=4aa681da-f147-4229-888e-27fb4e9a58a5")
 
 # ─────────────────────────────────────────────
 #  СИСТЕМНЫЙ ПРОМТ — ЛИЧНОСТЬ ДВОЙНИКА
